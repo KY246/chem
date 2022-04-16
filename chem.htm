@@ -1,0 +1,798 @@
+<html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, minimum-scale=1.0, maximum-scale = 1.0, user-scalable = no">
+    <title>Chemistry</title>
+    <style>
+      body{
+        margin: 0px;
+        padding: 0px;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="https://cdn.jsdelivr.net/gh/KY246/files@latest/p5-ka.js"></script>
+    <script>
+      let w, h, m;
+      let mouseIsPressed = false;
+      let drg = false;
+      let playing = true;
+      let graph = [], frc = 0, tot = 0, mam = 0;
+      
+      const score = [
+        1, // O2
+        1, // Methane
+        1, // Hydrogen
+        20,// Water
+        10,// Carbon Dioxide
+        5  // Carbon Monoxide
+      ];
+      
+      class Slider{
+        constructor(mi, mx, va, name){
+          this.min = mi;
+          this.range = mx - mi;
+          this.val = va ?? mi + 0.5 * this.range;
+          this.name = name;
+          
+          this.box = {x1:0,x2:0,y1:0,y2:0};
+        }
+        display(x, y, w, h){
+          stroke(200);
+          fill(255);
+          strokeWeight(3);
+          line(x, y + h / 2, x + w, y + h / 2);
+          stroke(255);
+          ellipse(x + w * (this.val - this.min) / this.range, y + h / 2, 10, 10);
+          
+          if(this.name){
+            textSize(h * 3 / 5);
+            fill(200);
+            noStroke();
+            text(this.name, x + w / 2, y + h * 1.3);
+          }
+          
+          this.box = {x1:x,x2:x+w,y1:y,y2:y+h};
+        }
+        click(){
+          if(mouseIsPressed && mouseX > this.box.x1 && mouseY > this.box.y1 && mouseX < this.box.x2 && mouseY < this.box.y2){
+            this.clicked();
+            
+            return true;
+          }
+        }
+        clicked(){
+          this.val = max(min(this.min + this.range * (mouseX - this.box.x1) / (this.box.x2 - this.box.x1), this.min + this.range), this.min);
+        }
+        grab(){
+          return this.val;
+        }
+        change(val){
+          this.val = val;
+        }
+      }
+      
+      class Button{
+        constructor(name, col = [255]){
+          this.name = name;
+          
+          this.c = col;
+          
+          this.box = {x1:0,x2:0,y1:0,y2:0};
+        }
+        display(x, y, w, h){
+          textSize(2.8 / 5 * h);
+          fill(...this.c);
+          noStroke();
+          text(this.name, x + w / 2, y + h / 2);
+          
+          stroke(lerpColor(color(...this.c), color(0), 0.5));
+          noFill();
+          strokeWeight(1);
+          rect(x, y, w, h);
+          
+          this.box = {x1:x,x2:x+w,y1:y,y2:y+h};
+        }
+        click(){
+          if(mouseX > this.box.x1 && mouseY > this.box.y1 && mouseX < this.box.x2 && mouseY < this.box.y2){
+            return true;
+          }
+        }
+      }
+      
+      class Particle{
+        constructor(type, x, y, vx, vy){
+          this.t = type;
+          this.x = x || (innerWidth - 360) * Math.random() + 340;
+          this.y = y || 400 * h * Math.random() + 100 * h;
+          this.vx = vx || Math.random() - 0.5;
+          this.vy = vy || Math.random() - 0.5;
+          
+          this.r = 5;
+          if(this.t == 1) this.r = 20;
+          if(this.t == 2) this.r = 15;
+          if(this.t == 3) this.r = 25;
+          
+          let d = Math.sqrt(this.vx**2+this.vy**2);
+          this.vx /= d;
+          this.vy /= d;
+          
+          if(this.t == 0){
+            this.vx *= 2;
+            this.vy *= 2;
+          }
+          
+          this.immune = 15;
+        }
+        draw(){
+          switch(this.t){
+            case 0:
+              fill(255, 255, 0);
+            break;
+            case 1:
+              fill(255, 0, 0);
+            break;
+            case 2:
+              fill(0, 255, 0);
+            break;
+            case 3:
+              fill(0, 0, 255);
+            break;
+          }
+          noStroke();
+          
+          ellipse(this.x, this.y, this.r, this.r);
+        }
+        move(id){
+          this.x += this.vx;
+          this.y += this.vy;
+          
+          if(this.t != 0){
+            if((this.x - this.r / 2 < 340 && this.vx < 0) || (this.x + this.r / 2 > width - 20 && this.vx > 0)){
+              this.vx *= -1;
+            }
+            if((this.y - this.r / 2 < 100 * h && this.vy < 0) || (this.y + this.r / 2 > 500 * h && this.vy > 0)){
+              this.vy *= -1;
+            }
+          }else{
+            if((this.x + this.r / 2 < 340 && this.vx < 0) || (this.x - this.r / 2 > width - 20 && this.vx > 0) || (this.y + this.r / 2 < 100 * h && this.vy < 0) || (this.y - this.r / 2 > 500 * h && this.vy > 0)){
+              this.dead = 99;
+            }
+            
+            if(this.immune < 0){
+              for(let i = 0; i < particles.length; i++){
+                if(particles[i].connections.length){
+                  if(dist(this.x, this.y, particles[i].x, particles[i].y) < 0.5 * (this.r + particles[i].r)){
+                    this.dead = true;
+                    if(particles[i].angle !== undefined){
+                      i = particles[i].connections[0];
+                    }
+
+                    particles[i].charge = particles[i].charge + 1 || 1;
+
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+        run(id){
+          this.draw();
+          
+          if(playing){
+            this.move(id);
+
+            this.immune --;
+          }
+          
+          return this.dead;
+        }
+      }
+      class Atom extends Particle{
+        constructor(...args){
+          super(...args);
+          
+          this.connections = [];
+          this.rot = 0;
+          this.rv = Math.random() * 0.2 - 0.1;
+        }
+        move(id){
+          super.move();
+          
+          if(this.immune > 0){
+            return;
+          }
+          
+          if(!this.connections.length || (this.connections.length == 1 && this.t == 3)){
+            let best1 = [0, 0];
+            let best2 = [0, 0, 0, 0];
+            
+            l1:for(let i = 0; i < particles.length; i++){
+              if(this == particles[i]){
+                continue;
+              }else if(particles[i].connections.length){
+                let d = dist(this.x, this.y, particles[i].x, particles[i].y);
+                if(d < 100 && ((this.t == 1 && particles[i].connections.length == 1 && particles[i].t == 2 && particles[particles[i].connections[0]].t == 2) || (this.t == 3 && this.connections.length == 0 && particles[i].connections.length == 1 && particles[i].t == 1 && particles[particles[i].connections[0]].t == 1))){
+                  let s = (score[3] - 1) / ((d + 50)**2);
+                  let p = +(best2[0] < best2[1]);
+                  if(s > best2[p]){
+                    best2 = [s, s, i, particles[i].connections[0]];
+                  }
+                  
+                  break l1;
+                }
+                
+                continue;
+              }
+              
+              let [ax, ay] = [particles[i].x - this.x, particles[i].y - this.y];
+              
+              let d = Math.sqrt(ax**2 + ay**2);
+              
+              if(d < 200 * w){
+                if(this.t == 1){
+                  if(particles[i].t == 1){
+                    let s = score[0] / (d*d);
+                    if(s > best1[0]){
+                      best1 = [s, i];
+                    }
+                  }else if(particles[i].t == 2){
+                    let s = score[3] / (d*d);
+                    let p = +(best2[0] > best2[1]);
+                    if(s > best2[p]){
+                      best2[p] = s;
+                      best2[p+2] = i;
+                    }
+                  }
+                }else if(this.t == 2){
+                  if(particles[i].t == 2){
+                    let s = score[2] / (d*d);
+                    if(s > best1[0]){
+                      best1 = [s, i];
+                    }
+                  }
+                }else if(this.t == 3){
+                  if(particles[i].t == 1){
+                    let s = score[3] / (d*d);
+                    let p = +(best2[0] > best2[1]);
+                    if(s > best2[p]){
+                      best2[p] = s;
+                      best2[p+2] = i;
+                    }
+                  }
+                }
+              }
+            }
+            
+            let best = [];
+            if(this.t == 1 || this.t == 2){
+              if(best1[0]){
+                best = [best1[1]];
+              }
+              if(best2[0] && best2[1] && best2[0] + best2[1] > 2 * best1[0]){
+                best = [best2[2], best2[3]];
+              }
+            }else{
+              if(this.connections.length && best2[0]){
+                if(best2[0] < best2[1]){
+                  best = [best2[3]];
+                }else{
+                  best = [best2[2]];
+                }
+              }else if(best2[3]){
+                best = [best2[2], best2[3]];
+              }else if(best2[0]){
+                best = [best2[2]];
+              }
+            }
+              
+            let ok = true;
+            for(let i = 0; i < best.length; i++){
+              let [ax, ay] = [particles[best[i]].x - this.x, particles[best[i]].y - this.y];
+
+              let d = Math.sqrt(ax**2 + ay**2);
+
+              if(d > 40){
+                ok = false;
+              }
+
+              ax /= 1.5 * d * max(d, 1);
+              ay /= 1.5 * d * max(d, 1);
+
+              this.vx += ax;
+              this.vy += ay;
+              
+              particles[best[i]].vx -= ax;
+              particles[best[i]].vy -= ay;
+            }
+
+            if(best.length && ok){
+              if(particles[best[0]].connections.length){
+                this.minus = 1;
+              }
+              
+              if(this.connections.length){
+                this.minus = score[5];
+                 particles[this.connections[0]].angle = 3.14;
+                this.connections = [...this.connections, ...best];
+              }else{
+                this.connections = best;
+              }
+
+              this.nvx = Math.random() - 0.5;
+              this.nvy = Math.random() - 0.5;
+              this.nv = 20;
+
+              let d = Math.sqrt(this.nvx**2+this.nvy**2);
+              this.nvx /= d;
+              this.nvy /= d;
+              
+              this.ex = 10;
+
+              for(let i = 0; i < best.length; i++){
+                particles[best[i]].connections = [id];
+                particles[best[i]].angle = (this.t == 3 ? 3.14 : 1.8) * i;
+              }
+            }
+          }else{
+            if(this.angle !== undefined){   
+              let par = particles[this.connections[0]];
+              
+              this.vx = 0.3 * (par.r + this.r) * Math.sin(this.angle + par.rot) + par.x - this.x;
+              this.vy = 0.3 * (par.r + this.r) * Math.cos(this.angle + par.rot) + par.y - this.y;
+
+              let d = Math.sqrt(this.vx**2+this.vy**2);
+              this.vx /= 0.5 * d;
+              this.vy /= 0.5 * d;
+            }else{
+              this.rot += this.rv;
+            }
+            
+            let sep = false;
+            if(this.charge){
+              if(this.connections.length != 2){
+                
+                if(this.t == 3 && this.connections.length == 1){
+                  if(this.charge > score[5]){
+                    sep = true;
+                  }else if(Math.random() < 0.05){
+                    this.charge --;
+                    nrg.push(new Particle(0, this.x, this.y));
+                  }
+                }else{
+                  sep = true;
+                }
+              }else if(this.t == 1){
+                if(this.charge > score[3]){
+                  sep = true;
+                }else if(Math.random() < 0.05){
+                  this.charge --;
+                  nrg.push(new Particle(0, this.x, this.y));
+                }
+              }else{
+                if(this.charge > score[4]){
+                  sep = true;
+                }else if(Math.random() < 0.05){
+                  this.charge --;
+                  nrg.push(new Particle(0, this.x, this.y));
+                }
+              }
+            }
+            
+            if(sep){
+              for(let i = 0; i < this.connections.length; i++){
+                let chi = particles[this.connections[i]];
+
+                chi.angle = undefined;
+                chi.connections = [];
+                chi.vx = Math.random() - 0.5;
+                chi.vy = Math.random() - 0.5;
+
+                let d = Math.sqrt(chi.vx**2+chi.vy**2);
+                chi.vx /= 0.5 * d;
+                chi.vy /= 0.5 * d;
+
+                chi.charge = 0;
+                chi.immune = 30;
+              }
+
+              this.connections = [];
+              this.vx = Math.random() - 0.5;
+              this.vy = Math.random() - 0.5;
+
+              this.charge = 0;
+
+              let d = Math.sqrt(this.vx**2+this.vy**2);
+              this.vx /= 0.5 * d;
+              this.vy /= 0.5 * d;
+
+              this.nv = 0;
+              this.immune = 30;
+            }
+          }
+          
+          if(this.nvx){
+            if(this.nv > 0){
+              this.vx = 0.9 * this.vx + 0.1 * this.nvx;
+              this.vy = 0.9 * this.vy + 0.1 * this.nvy;
+              this.nv --;
+            }
+          }
+          
+          if(this.ex){
+            this.ex--;
+            if(this.ex <= 0){
+              if(this.connections.length != 2){
+                nrg.push(new Particle(0, this.x, this.y));
+              }else if(this.t == 1){
+                for(let i = 0; i < score[3] - (this.minus || 0); i++){
+                  nrg.push(new Particle(0, this.x, this.y));
+                }
+                this.minus = undefined;
+              }else if(this.t == 3){
+                for(let i = 0; i < score[4] - (this.minus || 0); i++){
+                  nrg.push(new Particle(0, this.x, this.y));
+                }
+                this.minus = undefined;
+              }
+            }
+          }
+        }
+        static createO2(x, y, vx, vy){
+          x = x || (innerWidth - 360) * Math.random() + 340;
+          y = y || 400 * h * Math.random() + 100 * h;
+          
+          vx = vx || Math.random() - 0.5;
+          vy = vy || Math.random() - 0.5;
+          
+          let d = Math.sqrt(vx**2+vy**2);
+          vx /= d;
+          vy /= d;
+          
+          let id = particles.length;
+          particles.push(new Atom(1, x, y, vx, vy));
+          particles.push(new Atom(1, x, y, vx, vy));
+          
+          particles[id].connections = [id + 1];
+          particles[id + 1].connections = [id];
+          
+          particles[id + 1].angle = 0;
+        }
+        static createCH4(x, y, vx, vy){
+          x = x || (innerWidth - 360) * Math.random() + 340;
+          y = y || 400 * h * Math.random() + 100 * h;
+          
+          vx = vx || Math.random() - 0.5;
+          vy = vy || Math.random() - 0.5;
+          
+          let d = Math.sqrt(vx**2+vy**2);
+          vx /= 1.5 * d;
+          vy /= 1.5 * d;
+          
+          let id = particles.length;
+          particles.push(new Atom(2, x, y, vx, vy));
+          particles.push(new Atom(2, x, y, vx, vy));
+          particles.push(new Atom(2, x, y, vx, vy));
+          particles.push(new Atom(2, x, y, vx, vy));
+          particles.push(new Atom(3, x, y, vx, vy));
+          
+          particles[id + 4].connections = [id + 1, id + 2, id + 3, id];
+          
+          particles[id].connections = [id + 4];
+          particles[id + 1].connections = [id + 4];
+          particles[id + 2].connections = [id + 4];
+          particles[id + 3].connections = [id + 4];
+          
+          particles[id].angle = 0;
+          particles[id + 1].angle = 1.57;
+          particles[id + 2].angle = 3.14;
+          particles[id + 3].angle = 4.71;
+          
+          particles[id + 4].rv /= 2;
+        }
+        static createH2(x, y, vx, vy){
+          x = x || (innerWidth - 360) * Math.random() + 340;
+          y = y || 400 * h * Math.random() + 100 * h;
+          
+          vx = vx || Math.random() - 0.5;
+          vy = vy || Math.random() - 0.5;
+          
+          let d = Math.sqrt(vx**2+vy**2);
+          vx /= d;
+          vy /= d;
+          
+          let id = particles.length;
+          particles.push(new Atom(2, x, y, vx, vy));
+          particles.push(new Atom(2, x, y, vx, vy));
+          
+          particles[id].connections = [id + 1];
+          particles[id + 1].connections = [id];
+          
+          particles[id + 1].angle = 0;
+        }
+        static createCO(x, y, vx, vy){
+          x = x || (innerWidth - 360) * Math.random() + 340;
+          y = y || 400 * h * Math.random() + 100 * h;
+          
+          vx = vx || Math.random() - 0.5;
+          vy = vy || Math.random() - 0.5;
+          
+          let d = Math.sqrt(vx**2+vy**2);
+          vx /= d;
+          vy /= d;
+          
+          let id = particles.length;
+          particles.push(new Atom(3, x, y, vx, vy));
+          particles.push(new Atom(1, x, y, vx, vy));
+          
+          particles[id].connections = [id + 1];
+          particles[id + 1].connections = [id];
+          
+          particles[id + 1].angle = 0;
+        }
+        static createCO2(x, y, vx, vy){
+          x = x || (innerWidth - 360) * Math.random() + 340;
+          y = y || 400 * h * Math.random() + 100 * h;
+          
+          vx = vx || Math.random() - 0.5;
+          vy = vy || Math.random() - 0.5;
+          
+          let d = Math.sqrt(vx**2+vy**2);
+          vx /= d;
+          vy /= d;
+          
+          let id = particles.length;
+          particles.push(new Atom(3, x, y, vx, vy));
+          particles.push(new Atom(1, x, y, vx, vy));
+          particles.push(new Atom(1, x, y, vx, vy));
+          
+          particles[id].connections = [id + 1, id + 2];
+          particles[id + 1].connections = [id];
+          particles[id + 2].connections = [id];
+          
+          particles[id + 1].angle = 0;
+          particles[id + 2].angle = 3.14;
+        }
+        static createH2O(x, y, vx, vy){
+          x = x || (innerWidth - 360) * Math.random() + 340;
+          y = y || 400 * h * Math.random() + 100 * h;
+          
+          vx = vx || Math.random() - 0.5;
+          vy = vy || Math.random() - 0.5;
+          
+          let d = Math.sqrt(vx**2+vy**2);
+          vx /= d;
+          vy /= d;
+          
+          let id = particles.length;
+          particles.push(new Atom(1, x, y, vx, vy));
+          particles.push(new Atom(2, x, y, vx, vy));
+          particles.push(new Atom(2, x, y, vx, vy));
+          
+          particles[id].connections = [id + 1, id + 2];
+          particles[id + 1].connections = [id];
+          particles[id + 2].connections = [id];
+          
+          particles[id + 1].angle = 0;
+          particles[id + 2].angle = 1.8;
+        }
+      }
+      
+      let speed = new Slider(10, 60, 50, "Speed");
+      let energy = new Slider(1, 30, 5, "Energy");
+      
+      let restart = new Button("↻");
+      let play = new Button("▶");
+      let pause = new Button("ll");
+      let discharge = new Button("Energize");
+      
+      let O2 = new Button("O₂");
+      let CH4 = new Button("CH₄");
+      let H2 = new Button("H₂");
+      let CO2 = new Button("CO₂");
+      let H2O = new Button("H₂O");
+      let CO = new Button("CO");
+      
+      let oxygen = new Button("O", [255, 0, 0]);
+      let carbon = new Button("C", [0, 0, 255]);
+      let hydrogen = new Button("H", [0, 255, 0]);
+      
+      let hm = new Button("Hydrogen Mix");
+      let mm = new Button("Methane Mix");
+      
+      let particles = [], nrg = [];
+      
+      function setup(){
+        createCanvas(windowWidth, windowHeight);
+        
+        w = width / 600;
+        h = height / 600;
+        m = min(w, h);
+        
+        ellipseMode(CENTER);
+        textAlign(CENTER, CENTER);
+        
+        for(let i = 0; i < 3; i++){
+          /*Atom.createO2();
+          Atom.createO2();
+          Atom.createO2();
+          Atom.createCH4();
+          Atom.createH2();
+          Atom.createH2();*/
+        }
+      }
+      
+      function windowResized(){
+        resizeCanvas(windowWidth, windowHeight);
+        
+        w = width / 600;
+        h = height / 600;
+        m = min(w, h);
+      }
+      
+      function draw(){
+        background(0);
+        
+        
+        noFill();
+        stroke(255);
+        strokeWeight(2);
+        rect(340, 100 * h, width - 360, 400 * h);
+        
+        strokeWeight(1);
+        stroke(200);
+        rect(10, 250 * h, 320, 330 * h);
+        
+        fill(255);
+        noStroke();
+        textSize(15);
+        text("Energy (Output - Input)", 165, 265 * h);
+        
+        if(graph[0]){
+          let strt = graph[0][0];
+          let ind = 0;
+          
+          let space = frc - strt;
+          
+          let v = 0;
+          
+          noFill();
+          stroke(150);
+          
+          line(10, (310 + 260 * tot / (tot - mam)) * h, 330, (310 + 260 * tot / (tot - mam)) * h);
+          
+          stroke(255, 255, 0);
+          
+          beginShape();
+          for(let i = 10; i < 320; i+=310 / min(space, 155)){
+            let f = strt + space * (i - 10) / 310;
+            
+            while(graph[ind] && graph[ind][0] < f){
+              v += graph[ind][1];
+              ind ++;
+            }
+            
+            vertex(i, (310 + 260 * tot / (tot - mam)) * h - v * 230 * h / (tot - mam));
+            
+            tot = max(tot, v);
+            mam = min(mam, v);
+          }
+          endShape();
+        }
+        
+        speed.display(360, 560 * h, width - 400, 20);
+        energy.display(520, 40 * h, width - 560, 20);
+        
+        restart.display(75 + 0.5 * width, 510 * h, 50, 50);
+        play.display(135 + 0.5 * width, 510 * h, 50, 50);
+        pause.display(195 + 0.5 * width, 510 * h, 50, 50);
+        discharge.display(355, 36 * h, 150, 50);
+        O2.display(230, 20 * h, 80, 45);
+        CH4.display(230, 75 * h, 80, 45);
+        H2.display(230, 130 * h, 80, 45);
+        CO2.display(130, 20 * h, 80, 45);
+        H2O.display(130, 75 * h, 80, 45);
+        CO.display(130, 130 * h, 80, 45);
+        oxygen.display(30, 20 * h, 80, 45);
+        carbon.display(30, 75 * h, 80, 45);
+        hydrogen.display(30, 130 * h, 80, 45);
+        hm.display(15, 195 * h, 150, 35);
+        mm.display(175, 195 * h, 150, 35);
+        
+        let num = 0;
+        
+        for(let i = 0; i < particles.length; i++){
+          particles[i].run(i);
+        }
+        for(let i = 0; i < nrg.length; i++){
+          if(nrg[i].run(i)){
+            if(nrg[i].dead == 99){
+              num ++;
+            }
+            nrg.splice(i--, 1);
+          }
+        }
+        
+        if(playing){
+          frc ++;
+        }
+        
+        if(num){
+          graph.push([frc, num]);
+        }
+        
+        if(drg){
+          drg.clicked();
+        }
+        
+        frameRate(speed.grab());
+      }
+      
+      function mousePressed(){
+        mouseIsPressed = true;
+        
+        if(speed.click()){
+          drg = speed;
+        }else if(energy.click()){
+          drg = energy;
+        }else if(discharge.click()){
+          for(let i = 0; i < energy.grab(); i++){
+            nrg.push(new Particle(0, 160 + width / 2, 110 * h, Math.random() - 0.5, 0.5));
+          }
+          
+          graph.push([frc, -ceil(energy.grab())]);
+        }else if(O2.click()){
+          Atom.createO2(null, 500 * h);
+        }else if(CH4.click()){
+          Atom.createCH4(null, 500 * h);
+        }else if(H2.click()){
+          Atom.createH2(null, 500 * h);
+        }else if(CO2.click()){
+          Atom.createCO2(null, 500 * h);
+        }else if(CO.click()){
+          Atom.createCO(null, 500 * h);
+        }else if(H2O.click()){
+          Atom.createH2O(null, 500 * h);
+        }else if(oxygen.click()){
+          particles.push(new Atom(1, null, 500 * h));
+        }else if(carbon.click()){
+          particles.push(new Atom(3, null, 500 * h));
+        }else if(hydrogen.click()){
+          particles.push(new Atom(2, null, 500 * h));
+        }else if(hm.click()){
+          for(let i = 0; i < 5; i++){
+            Atom.createH2(340);
+            Atom.createH2(340);
+            Atom.createO2(width - 20);
+          }
+        }else if(mm.click()){
+          for(let i = 0; i < 4; i++){
+            Atom.createCH4(340);
+            Atom.createO2(width - 20);
+            Atom.createO2(width - 20);
+          }
+        }else if(restart.click()){
+          particles = [];
+          nrg = [];
+          graph = [];
+          frc = 0;
+          tot = 0;
+          mam = 0;
+        }else if(play.click()){
+          playing = true;
+        }else if(pause.click()){
+          playing = false;
+        }
+      }
+      
+      function mouseReleased(){
+        mouseIsPressed = false;
+        
+        drg = false;
+      }
+    </script>
+  
+
+    <!--3500+ lines!-->
+  </body>
+</html>
