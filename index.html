@@ -334,7 +334,8 @@
                 particles[best[i]].angle = (this.t == 3 ? 3.14 : 1.8) * i;
               }
             }
-          }else{
+          }
+          if(this.connections.length){
             if(this.angle !== undefined){   
               let par = particles[this.connections[0]];
               
@@ -349,6 +350,8 @@
             }
             
             let sep = false;
+            
+            
             if(this.charge){
               if(this.connections.length != 2){
                 
