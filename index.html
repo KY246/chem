@@ -423,7 +423,13 @@
             this.ex--;
             if(this.ex <= 0){
               if(this.connections.length != 2){
-                nrg.push(new Particle(0, this.x, this.y));
+                if(this.t == 3){
+                  for(let i = 0; i < score[5] - (this.minus || 0); i++){
+                    nrg.push(new Particle(0, this.x, this.y));
+                  }
+                }else{
+                  nrg.push(new Particle(0, this.x, this.y));
+                }
               }else if(this.t == 1){
                 for(let i = 0; i < score[3] - (this.minus || 0); i++){
                   nrg.push(new Particle(0, this.x, this.y));
